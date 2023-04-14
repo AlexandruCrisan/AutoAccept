@@ -1,0 +1,6 @@
+{
+    "errorCode": "RPC_ERROR",
+    "httpStatus": 404,
+    "implementationDetails": {},
+    "message": "No active delegate"
+}
