@@ -14,7 +14,7 @@ class App(tk.Tk):
     self.configure(bg='#39206b')
 
     self.__view = View(self)
-    self.wait_visibility()
+    # self.wait_visibility()
     self.__controller = Controller(self.__view)
     self.__view.set_controller(self.__controller)
     

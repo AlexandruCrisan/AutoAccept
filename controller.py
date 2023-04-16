@@ -1,9 +1,11 @@
 import os
+import time
 
 import requests
 from requests.auth import HTTPBasicAuth
 
 import utils
+from const import *
 from view import View
 
 
@@ -15,12 +17,63 @@ class Controller:
     self.__PORT = None
     self.__PASSWORD = None
 
-    self.summoner_name = ''
     self.saved_user_file = None
 
 
+    self.champion_select_feature_on = False
 
+    # UI Hook
     self.__view = view
+
+  def __accept_queue(self):
+    requests.post(f"https://127.0.0.1:{self.__PORT}/lol-matchmaking/v1/ready-check/accept", auth=self.__auth, verify="riotgames.pem")
+
+  def __take_action(self, action_id: str, data):
+    r = requests.patch(f"https://127.0.0.1:{self.__PORT}/lol-champ-select/v1/session/actions/{action_id}", json=data, auth=self.__auth, verify="riotgames.pem")
+    return r
+
+  def __lock_champion(self, action_id: str, data):
+    return requests.post(f"https://127.0.0.1:{self.__PORT}/lol-champ-select/v1/session/actions/{action_id}/complete", json=data, auth=self.__auth, verify="riotgames.pem")
+
+  def __champ_select(self):
+    res = requests.get(f"https://127.0.0.1:{self.__PORT}/lol-champ-select/v1/session", auth=self.__auth, verify="riotgames.pem")
+    res = res.json()
+
+    my_actor_cell_id = [teammate['cellId'] for teammate in res['myTeam'] if teammate['summonerId'] == self.get_current_summoner_id()]
+    print(f"My cell ID : {my_actor_cell_id}")
+
+
+    for action_groups in res["actions"]:
+      for action in filter(lambda ac: ac["actorCellId"], action_groups):
+        data = None
+        if action["type"] == 'ban':
+          data = {"championId": 90}
+        if action["type"] == 'pick':
+          data = {"championId": 32}
+
+        if action["isInProgress"] is True:
+          self.__take_action(action_id=action["id"], data=data)
+          self.__lock_champion(action_id=action["id"], data=data)
+
+  def start_process(self):
+    print("process_started")
+    while True:
+      res = requests.get(f"https://127.0.0.1:{self.__PORT}/lol-gameflow/v1/gameflow-phase", auth=self.__auth, verify="riotgames.pem")
+
+      if res.status_code != 200:
+        continue
+
+      current_phase = res.json()
+
+      if current_phase == MATCH_FOUND_PHASE:
+        self.__accept_queue()
+        continue
+
+      if current_phase == CHAMP_SELECT_PHASE:
+        print("CHAMP SELECT")
+        self.__champ_select()
+        continue
+
 
   def assure_game_folder(self):
     data = utils.read_json_from_file("userdata.json")
@@ -35,11 +88,13 @@ class Controller:
 
   def __parse_lockfile(self):
     self.saved_user_file = utils.read_json_from_file("userdata.json")
+
+    # Check if the lockfile exists (if client is running)
     while not os.path.exists(f'{self.saved_user_file["GAME_FOLDER"]}\\lockfile'):
       self.__view.error_window("LEAGUE CLIENT NOT OPEN")
       self.saved_user_file = utils.read_json_from_file("userdata.json")
     
-
+    # Read from lockfile
     with open(f'{self.saved_user_file["GAME_FOLDER"]}\\lockfile', 'r') as lockfile:
       content = lockfile.read()
     
@@ -47,14 +102,15 @@ class Controller:
     self.PORT = content[2]
     self.PASSWORD = content[3]
 
-
   def __connect(self):
     self.__view.summoner_name.set(self.get_current_summoner_name())
+
+    current_level_percentage = self.get_current_lvl_percentage()
+    self.__view.level_percentage.set(f"{current_level_percentage[0]}% => {current_level_percentage[1] + 1}")
 
   def connect_to_LCU(self):
     """Connect to the LCU API after checking the required info is available (path to the game files)
     """
-    # self.saved_user_file = self.assure_game_folder()
     self.assure_game_folder()
     self.__parse_lockfile()
 
@@ -88,9 +144,18 @@ class Controller:
     resp = fn(f"{self.__BASE_URL}{path}", verify="riotgames.pem", auth=self.__auth)
     return resp
 
+  def get_current_summoner_id(self):
+    res = requests.get(f"https://127.0.0.1:{self.__PORT}/lol-login/v1/session", auth=self.__auth, verify="riotgames.pem")
+    return res.json()["summonerId"]
+
   def get_current_summoner_name(self):
     res = requests.get(f"https://127.0.0.1:{self.__PORT}/lol-summoner/v1/current-summoner", auth=self.__auth, verify="riotgames.pem")
+    print(res.json())
     return res.json()["displayName"]
+
+  def get_current_lvl_percentage(self):
+    res = requests.get(f"https://127.0.0.1:{self.__PORT}/lol-summoner/v1/current-summoner", auth=self.__auth, verify="riotgames.pem")
+    return (res.json()["percentCompleteForNextLevel"], res.json()["summonerLevel"])
 
   
 
