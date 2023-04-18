@@ -1,7 +1,12 @@
+import cProfile
+import multiprocessing
 import os
+import pstats
 import tkinter as tk
-from functools import partial
+from threading import Thread
 from tkinter.simpledialog import askstring
+
+from PIL import Image
 
 import utils
 from const import *
@@ -13,6 +18,12 @@ class View(tk.Frame):
     self.__parent = parent
     self.__controller = None
     
+    # Remember the photos 
+    self.spells_photos = []
+    self.champion_photos = []
+    self.pick_champion_photos = [tk.PhotoImage(file=f"{CHAMPION_ICONS_DIR}tbd.png"), tk.PhotoImage(file=f"{CHAMPION_ICONS_DIR}tbd.png"), tk.PhotoImage(file=f"{CHAMPION_ICONS_DIR}tbd.png")]
+    self.pick_spells_photos = [tk.PhotoImage(file=(f"{SUMMONER_SPELLS_DIR}/tbd.png")), tk.PhotoImage(file=(f"{SUMMONER_SPELLS_DIR}/tbd.png"))]
+
     # Account username
     self.summoner_name = tk.StringVar(value='Waiting for Name')
     self.display_username = tk.Label(master=parent, font=FONT_PRIMARY, fg=TEXT_COLOR_PRIMARY, bg=parent["bg"], textvariable=self.summoner_name).pack(anchor=tk.NE, padx=PADDING_X_MIN)
@@ -35,18 +46,26 @@ class View(tk.Frame):
     self.main_frame = tk.Frame(master=parent, bg=parent["bg"])
     self.main_frame.pack(side=tk.RIGHT, padx=40)
 
-    # 3 buttons 
+    # 3 buttons frame
     self.selected_champs_frame = tk.Frame(master=self.main_frame, bg=self.main_frame["bg"])
     self.selected_champs_frame.pack(side=tk.LEFT)
 
-    self.tbd_image = tk.PhotoImage(file=f"{CHAMPION_ICONS_DIR}tbd.png")
+    # self.tbd_image = tk.PhotoImage(file=f"{CHAMPION_ICONS_DIR}tbd.png")
 
-    self.first_pick = tk.Button(master=self.selected_champs_frame, text="Pick1  ", fg=TEXT_COLOR_PRIMARY, font=FONT_SECONDARY, bg=self.selected_champs_frame["bg"], compound="right", image=self.tbd_image, borderwidth=0)
-    self.first_pick.pack(side=tk.TOP, padx=10)
-    self.second_pick = tk.Button(master=self.selected_champs_frame, text="Pick2  ", fg=TEXT_COLOR_PRIMARY, font=FONT_SECONDARY, bg=self.selected_champs_frame["bg"], compound="right", image=self.tbd_image, borderwidth=0)
-    self.second_pick.pack(side=tk.TOP, padx=10)
-    self.ban_pick = tk.Button(master=self.selected_champs_frame, text="Ban  ",fg=TEXT_COLOR_PRIMARY, font=FONT_SECONDARY, bg=self.selected_champs_frame["bg"], compound="right", image=self.tbd_image, borderwidth=0)
-    self.ban_pick.pack(side=tk.TOP, padx=10)
+    # First pick button
+    self.__is_looking_for_first_pick = False
+    self.first_pick = tk.Button(master=self.selected_champs_frame, activebackground=self.selected_champs_frame["bg"], text="Pick1  ", fg=TEXT_COLOR_PRIMARY, font=FONT_SECONDARY, bg=self.selected_champs_frame["bg"], compound="right", image=self.pick_champion_photos[0], borderwidth=0, command=self.__first_pick_clicked)
+    self.first_pick.pack(side=tk.TOP, padx=10, pady=10)
+
+    # Second pick button
+    self.__is_looking_for_second_pick = False
+    self.second_pick = tk.Button(master=self.selected_champs_frame, activebackground=self.selected_champs_frame["bg"], text="Pick2  ", fg=TEXT_COLOR_PRIMARY, font=FONT_SECONDARY, bg=self.selected_champs_frame["bg"], compound="right", image=self.pick_champion_photos[0], borderwidth=0, command=self.__second_pick_clicked)
+    self.second_pick.pack(side=tk.TOP, padx=10, pady=10)
+
+    # Ban pick button
+    self.__is_looking_for_ban_pick = False
+    self.ban_pick = tk.Button(master=self.selected_champs_frame, activebackground=self.selected_champs_frame["bg"], text="Ban  ",fg=TEXT_COLOR_PRIMARY, font=FONT_SECONDARY, bg=self.selected_champs_frame["bg"], compound="right", image=self.pick_champion_photos[0], borderwidth=0, command=self.__ban_pick_clicked)
+    self.ban_pick.pack(side=tk.TOP, padx=10, pady=10)
 
     # Frame for searchbar, scrollbar and canvas
     self.sub_frame = tk.Frame(master=self.main_frame, bg=parent["bg"])
@@ -73,20 +92,154 @@ class View(tk.Frame):
     self.myscrollbar.grid(row=0, column=1, sticky=tk.NS)
     self.canvas_container.create_window((0,0),window=self.frame2,anchor='nw')
 
-    # Remember the photos 
-    self.photos = []
+    # Main Frame for spell selection
+    self.spell_main_frame = tk.Frame(master=parent, bg=parent['bg'])
+    self.spell_main_frame.pack(side=tk.BOTTOM, pady=10)
 
+    # Frame for user selection
+    self.user_selection_frame = tk.Frame(master=self.spell_main_frame, bg=self.spell_main_frame["bg"])
+    self.user_selection_frame.pack(side=tk.TOP)
+
+    # Frame for available options
+    self.available_options_frame = tk.Frame(master=self.spell_main_frame, bg=self.spell_main_frame["bg"])
+    self.available_options_frame.pack(side=tk.BOTTOM, pady=20)
+
+    # Available options buttons
+    # self.available_options_buttons = self.__initialise_spell_buttons()
+
+    # User selection buttons
+    self.__is_looking_for_d_spell = False
+    self.__is_looking_for_f_spell = False
+    
+    self.selected_spell_d = tk.Button(master=self.user_selection_frame, text="D", activeforeground=TEXT_COLOR_PRIMARY, fg=TEXT_COLOR_PRIMARY, bg=self.spell_main_frame['bg'], font=FONT_PRIMARY,compound="center", borderwidth=0, bd=0, highlightthickness=0, image=self.pick_spells_photos[0], command=self.__d_spell_clicked)
+    self.selected_spell_f = tk.Button(master=self.user_selection_frame, text="F", activeforeground='blue', fg='black',bg=self.spell_main_frame['bg'], font=('Helvetica', 25, 'bold'),compound="center", borderwidth=0, bd=0, highlightthickness=0, image=self.pick_spells_photos[0], command=self.__f_spell_clicked)
+
+    self.selected_spell_d.pack(side="left")
+    self.selected_spell_f.pack(side="left", padx=40)
+    
+
+    
+
+    self.__initialise_spell_buttons()
+
+    self.__assignment_threads = list()
+
+    self.start_thread = Thread()
 
     self.__setup_champion_buttons()
 
+  def __f_spell_clicked(self):
+    self.__is_looking_for_f_spell = not self.__is_looking_for_f_spell
+    self.selected_spell_f.config(bg="red" if self.__is_looking_for_f_spell is True else self.spell_main_frame["bg"])
+    if self.__is_looking_for_f_spell is True:
+      self.__is_looking_for_d_spell = False
+      self.selected_spell_d.config(bg=self.spell_main_frame["bg"])   
+ 
+ 
+  def __d_spell_clicked(self):
+    self.__is_looking_for_d_spell = not self.__is_looking_for_d_spell
+    self.selected_spell_d.config(bg="red" if self.__is_looking_for_d_spell is True else self.spell_main_frame["bg"])
+
+    if self.__is_looking_for_d_spell is True:
+      self.__is_looking_for_f_spell = False
+      self.selected_spell_f.config(bg=self.spell_main_frame["bg"])
+
+  def __spell_button_clicked(self, spell):
+    if self.__is_looking_for_f_spell is True:
+      self.__is_looking_for_f_spell = False
+      self.selected_spell_f.config(bg=self.spell_main_frame["bg"])
+      self.pick_spells_photos[1]=tk.PhotoImage(file=f"{SUMMONER_SPELLS_DIR}/{spell}.png")
+      self.__update_picture(self.selected_spell_f, self.pick_spells_photos[1])
+
+    elif self.__is_looking_for_d_spell is True:
+      self.__is_looking_for_d_spell = False
+      self.selected_spell_d.config(bg=self.spell_main_frame["bg"])
+      self.pick_spells_photos[0]=tk.PhotoImage(file=f"{SUMMONER_SPELLS_DIR}/{spell}.png")
+      self.__update_picture(self.selected_spell_d, self.pick_spells_photos[0])
+
+  
+  def __initialise_spell_buttons(self):
+    for filename in os.listdir(SUMMONER_SPELLS_DIR):
+      if filename != 'tbd.png':
+        f = os.path.join(SUMMONER_SPELLS_DIR, filename)
+        self.spells_photos.append(tk.PhotoImage(file=f))
+        btn = tk.Button(master=self.available_options_frame, highlightthickness=0, text=filename.split('.')[0], image=self.spells_photos[-1], borderwidth=0)
+        btn.pack(side="left", padx=5)
+        btn.config(command=lambda button=btn: self.__spell_button_clicked(button.cget('text')))
+
+  def __first_pick_clicked(self):
+    self.__is_looking_for_first_pick = not self.__is_looking_for_first_pick
+
+    self.first_pick.config(bg="red" if self.__is_looking_for_first_pick is True else self.selected_champs_frame["bg"])
+    
+    if self.__is_looking_for_first_pick is True:
+      self.__is_looking_for_second_pick = False
+      self.__is_looking_for_ban_pick = False
+      self.second_pick.config(bg=self.selected_champs_frame["bg"])
+      self.ban_pick.config(bg=self.selected_champs_frame["bg"])
+
+  def __second_pick_clicked(self):
+    self.__is_looking_for_second_pick = not self.__is_looking_for_second_pick
+    self.second_pick.config(bg="red" if self.__is_looking_for_second_pick is True else self.selected_champs_frame["bg"])
+    
+    if self.__is_looking_for_second_pick is True:
+      self.__is_looking_for_first_pick = False
+      self.__is_looking_for_ban_pick = False
+      self.first_pick.config(bg=self.selected_champs_frame["bg"])
+      self.ban_pick.config(bg=self.selected_champs_frame["bg"])
+
+  def __ban_pick_clicked(self):
+    self.__is_looking_for_ban_pick = not self.__is_looking_for_ban_pick
+    self.ban_pick.config(bg="red" if self.__is_looking_for_ban_pick is True else self.selected_champs_frame["bg"])
+    
+    if self.__is_looking_for_ban_pick is True:
+      self.__is_looking_for_first_pick = False
+      self.__is_looking_for_second_pick = False
+      self.first_pick.config(bg=self.selected_champs_frame["bg"])
+      self.second_pick.config(bg=self.selected_champs_frame["bg"])
+
+  def __update_picture(self, btn, image):
+    btn.config(image=image)
+
+  def __set_controller_pick_ban(self, value, pick_index=-1):
+    if pick_index == -1:
+      self.__controller.ban = self.__controller.get_champion_id(value)
+      return
+    self.__controller.picks[pick_index] = self.__controller.get_champion_id(value)
+
+
   def __champion_select_button_clicked(self, btn):
-    print(btn.cget('text'))
+    if self.__is_looking_for_first_pick is True:
+      self.pick_photos[0]=tk.PhotoImage(file=f"{CHAMPION_ICONS_DIR}{btn}.png")
+      self.__update_picture(self.first_pick, self.pick_photos[0])
+      self.__assignment_threads.append(Thread(target=self.__set_controller_pick_ban, args=(btn,0,)))
+      self.__assignment_threads[-1].start()
+      return
+      
+    if self.__is_looking_for_second_pick is True:
+      self.pick_photos[1]=tk.PhotoImage(file=f"{CHAMPION_ICONS_DIR}{btn}.png")
+      self.__update_picture(self.second_pick, self.pick_photos[1])
+      self.__assignment_threads.append(Thread(target=self.__set_controller_pick_ban, args=(btn,1,)))
+      self.__assignment_threads[-1].start()
+      return
+
+    if self.__is_looking_for_ban_pick is True:
+      self.pick_photos[2]=tk.PhotoImage(file=f"{CHAMPION_ICONS_DIR}{btn}.png")
+      self.__update_picture(self.ban_pick, self.pick_photos[2])
+      self.__assignment_threads.append(Thread(target=self.__set_controller_pick_ban, args=(btn,)))
+      self.__assignment_threads[-1].start()
+      return
 
   def __text_changed_in_entry(self, e):
     typed = self.search_bar.get()
     print(f"TYPED: {typed}")
+    # with cProfile.Profile() as pr:
     data = self.__get_champion_images_from_dir(typed)
 
+    # stats = pstats.Stats(pr)
+    # stats.sort_stats(pstats.SortKey.TIME)
+    # stats.print_stats()
+  
     self.__load_champions_by_list(files=data)
 
   def __get_champion_images_from_dir(self, filter=None):
@@ -113,9 +266,9 @@ class View(tk.Frame):
     row, column = 0,0
     buttons = [[0 for _ in range(100)] for _ in range(100)]
     for f in files:
-      self.photos.append(tk.PhotoImage(file=f))
-      btn = tk.Button(master=self.frame2, text=f.split('/')[2].split('.')[0], image=self.photos[-1], borderwidth=0)
-      btn.config(command=lambda button=btn: self.__champion_select_button_clicked(button))
+      self.champion_photos.append(tk.PhotoImage(file=f))
+      btn = tk.Button(master=self.frame2, text=f.split('/')[2].split('.')[0], image=self.champion_photos[-1], borderwidth=0)
+      btn.config(command=lambda button=btn: self.__champion_select_button_clicked(button.cget('text')))
       if column == NUMBER_OF_COLUMNS:
         row += 1
         column = 0
@@ -124,9 +277,6 @@ class View(tk.Frame):
       column += 1
 
     self.frame2.update()
-    # first5columns_width = sum([buttons[0][j].winfo_width() for j in range(0, NUMBER_OF_COLUMNS)])
-    # print(first5columns_width)
-    # self.canvas_container.config(width=first5columns_width)
     self.canvas_container.configure(yscrollcommand=self.myscrollbar.set, scrollregion=f"0 0 0 {self.frame2.winfo_height()}" )
 
   def __setup_champion_buttons(self):
@@ -136,7 +286,7 @@ class View(tk.Frame):
 
       # checking if it is a file
       if os.path.isfile(f):
-        if filename != "tbd.png":
+        if filename != "tbd.PNG":
           files.append(f)
 
     self.__load_champions_by_list(files=files)
@@ -147,8 +297,19 @@ class View(tk.Frame):
     new_text = STOP_PROCESS_BUTTON_TEXT if self.__is_toggle_start_process else START_PROCESS_BUTTON_TEXT
     self.start_process_button.configure(bg=new_color, text=new_text)
 
+    for (index, t) in enumerate(self.__assignment_threads):
+      if t.is_alive() is True:
+        print(f"T{index} ALIVE")
+        t.join()
+
+    self.__assignment_threads.clear()
     # Controller implementation
-    self.__controller.start_process()
+
+    if self.start_thread.is_alive():
+      self.__controller.kill_thread = True
+      return
+    self.start_thread = Thread(target=self.__controller.start_process)
+    self.start_thread.start()
 
 
   def __champion_select_feature_button_pressed(self):
@@ -170,6 +331,14 @@ class View(tk.Frame):
       top.geometry("250x100")
       top.title("ERROR")
       top.configure(bg="#8c0611")
+
+      dx, dy = 0, 0
+      x = self.__parent.winfo_x()
+      y = self.__parent.winfo_y()
+      w = top.winfo_width()
+      h = top.winfo_height()  
+      top.geometry("%dx%d+%d+%d" % (w, h, x + dx, y + dy))
+
       tk.Label(master=top, bg = top["bg"], text=text, fg=TEXT_COLOR_PRIMARY, font=ERROR_FONT).pack(expand=1)
       tk.Button(master=top, text="Change path", command=lambda: self.__change_path_button_pressed(top)).pack(side="left")
       tk.Button(master=top, text="Quit", command=self.__quit).pack(side="right", padx=10)

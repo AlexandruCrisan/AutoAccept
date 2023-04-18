@@ -1,5 +1,7 @@
+import json
 import os
 import time
+from threading import Thread
 
 import requests
 from requests.auth import HTTPBasicAuth
@@ -22,8 +24,23 @@ class Controller:
 
     self.champion_select_feature_on = False
 
+    self.picks = [None, None]
+    self.__current_pick_index = 0
+    self.ban = None
+
+    self.kill_thread = False
     # UI Hook
     self.__view = view
+
+  def __get_current_client_version(self):
+    version = requests.get(f"https://ddragon.leagueoflegends.com/api/versions.json").json()
+    return version[0]
+
+  def get_champion_id(self, champion_name: str):
+    latest = self.__get_current_client_version()
+
+    champion_json = requests.get(f"https://ddragon.leagueoflegends.com/cdn/{latest}/data/en_US/champion/{champion_name}.json").json()
+    return champion_json["data"][champion_name]["key"]
 
   def __accept_queue(self):
     requests.post(f"https://127.0.0.1:{self.__PORT}/lol-matchmaking/v1/ready-check/accept", auth=self.__auth, verify="riotgames.pem")
@@ -40,37 +57,51 @@ class Controller:
     res = res.json()
 
     my_actor_cell_id = [teammate['cellId'] for teammate in res['myTeam'] if teammate['summonerId'] == self.get_current_summoner_id()]
-    print(f"My cell ID : {my_actor_cell_id}")
+    print(f"My cell ID : {my_actor_cell_id[0]}")
 
 
     for action_groups in res["actions"]:
-      for action in filter(lambda ac: ac["actorCellId"], action_groups):
-        data = None
+      for action in filter(lambda ac: (ac["actorCellId"] == my_actor_cell_id[0] and ac["isInProgress"] is True), action_groups):
+        print(f"Action {action['type']}")
+        
+        data = {"championId": self.ban if action["type"] == 'ban' else self.picks[self.__current_pick_index]}
+
         if action["type"] == 'ban':
-          data = {"championId": 90}
-        if action["type"] == 'pick':
-          data = {"championId": 32}
-
-        if action["isInProgress"] is True:
-          self.__take_action(action_id=action["id"], data=data)
-          self.__lock_champion(action_id=action["id"], data=data)
-
+          code = self.__take_action(action_id=action["id"], data=data)
+          print(f"Ban pick {code.status_code}")
+          code = self.__lock_champion(action_id=action["id"], data=data)
+          print(f"Ban lock {code.status_code}")
+        elif action["type"] == 'pick':
+          code = self.__take_action(action_id=action["id"], data=data)
+          print(f"Pick pick {code.status_code}")
+          code = self.__lock_champion(action_id=action["id"], data=data)
+          print(f"Pick lock {code.status_code}")
+          self.__current_pick_index += 1
+      
   def start_process(self):
-    print("process_started")
+    print(f"process_started  PICK1: {self.picks[0]}, PICK2: {self.picks[1]}, BAN: {self.ban}")
+
     while True:
+      if self.kill_thread is True:
+        self.kill_thread = False
+        print("KILLED THREAD")
+        return
+
       res = requests.get(f"https://127.0.0.1:{self.__PORT}/lol-gameflow/v1/gameflow-phase", auth=self.__auth, verify="riotgames.pem")
 
       if res.status_code != 200:
         continue
-
+      
       current_phase = res.json()
+      print(current_phase)
 
       if current_phase == MATCH_FOUND_PHASE:
+        self.__current_pick_index = 0
         self.__accept_queue()
         continue
 
       if current_phase == CHAMP_SELECT_PHASE:
-        print("CHAMP SELECT")
+        # print("CHAMP SELECT")
         self.__champ_select()
         continue
 
