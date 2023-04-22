@@ -59,12 +59,12 @@ class View(tk.Frame):
 
     # Second pick button
     self.__is_looking_for_second_pick = False
-    self.second_pick = tk.Button(master=self.selected_champs_frame, activebackground=self.selected_champs_frame["bg"], text="Pick2  ", fg=TEXT_COLOR_PRIMARY, font=FONT_SECONDARY, bg=self.selected_champs_frame["bg"], compound="right", image=self.pick_champion_photos[0], borderwidth=0, command=self.__second_pick_clicked)
+    self.second_pick = tk.Button(master=self.selected_champs_frame, activebackground=self.selected_champs_frame["bg"], text="Pick2  ", fg=TEXT_COLOR_PRIMARY, font=FONT_SECONDARY, bg=self.selected_champs_frame["bg"], compound="right", image=self.pick_champion_photos[1], borderwidth=0, command=self.__second_pick_clicked)
     self.second_pick.pack(side=tk.TOP, padx=10, pady=10)
 
     # Ban pick button
     self.__is_looking_for_ban_pick = False
-    self.ban_pick = tk.Button(master=self.selected_champs_frame, activebackground=self.selected_champs_frame["bg"], text="Ban  ",fg=TEXT_COLOR_PRIMARY, font=FONT_SECONDARY, bg=self.selected_champs_frame["bg"], compound="right", image=self.pick_champion_photos[0], borderwidth=0, command=self.__ban_pick_clicked)
+    self.ban_pick = tk.Button(master=self.selected_champs_frame, activebackground=self.selected_champs_frame["bg"], text="Ban  ",fg=TEXT_COLOR_PRIMARY, font=FONT_SECONDARY, bg=self.selected_champs_frame["bg"], compound="right", image=self.pick_champion_photos[2], borderwidth=0, command=self.__ban_pick_clicked)
     self.ban_pick.pack(side=tk.TOP, padx=10, pady=10)
 
     # Frame for searchbar, scrollbar and canvas
@@ -210,22 +210,22 @@ class View(tk.Frame):
 
   def __champion_select_button_clicked(self, btn):
     if self.__is_looking_for_first_pick is True:
-      self.pick_photos[0]=tk.PhotoImage(file=f"{CHAMPION_ICONS_DIR}{btn}.png")
-      self.__update_picture(self.first_pick, self.pick_photos[0])
+      self.pick_champion_photos[0]=tk.PhotoImage(file=f"{CHAMPION_ICONS_DIR}{btn}.png")
+      self.__update_picture(self.first_pick, self.pick_champion_photos[0])
       self.__assignment_threads.append(Thread(target=self.__set_controller_pick_ban, args=(btn,0,)))
       self.__assignment_threads[-1].start()
       return
       
     if self.__is_looking_for_second_pick is True:
-      self.pick_photos[1]=tk.PhotoImage(file=f"{CHAMPION_ICONS_DIR}{btn}.png")
-      self.__update_picture(self.second_pick, self.pick_photos[1])
+      self.pick_champion_photos[1]=tk.PhotoImage(file=f"{CHAMPION_ICONS_DIR}{btn}.png")
+      self.__update_picture(self.second_pick, self.pick_champion_photos[1])
       self.__assignment_threads.append(Thread(target=self.__set_controller_pick_ban, args=(btn,1,)))
       self.__assignment_threads[-1].start()
       return
 
     if self.__is_looking_for_ban_pick is True:
-      self.pick_photos[2]=tk.PhotoImage(file=f"{CHAMPION_ICONS_DIR}{btn}.png")
-      self.__update_picture(self.ban_pick, self.pick_photos[2])
+      self.pick_champion_photos[2]=tk.PhotoImage(file=f"{CHAMPION_ICONS_DIR}{btn}.png")
+      self.__update_picture(self.ban_pick, self.pick_champion_photos[2])
       self.__assignment_threads.append(Thread(target=self.__set_controller_pick_ban, args=(btn,)))
       self.__assignment_threads[-1].start()
       return
@@ -332,12 +332,12 @@ class View(tk.Frame):
       top.title("ERROR")
       top.configure(bg="#8c0611")
 
-      dx, dy = 0, 0
-      x = self.__parent.winfo_x()
-      y = self.__parent.winfo_y()
-      w = top.winfo_width()
-      h = top.winfo_height()  
-      top.geometry("%dx%d+%d+%d" % (w, h, x + dx, y + dy))
+      # dx, dy = 0, 0
+      # x = self.__parent.winfo_x()
+      # y = self.__parent.winfo_y()
+      # w = top.winfo_width()
+      # h = top.winfo_height()  
+      # top.geometry("%dx%d+%d+%d" % (w, h, x + dx, y + dy))
 
       tk.Label(master=top, bg = top["bg"], text=text, fg=TEXT_COLOR_PRIMARY, font=ERROR_FONT).pack(expand=1)
       tk.Button(master=top, text="Change path", command=lambda: self.__change_path_button_pressed(top)).pack(side="left")
